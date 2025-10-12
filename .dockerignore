@@ -1,0 +1,28 @@
+# Ignore unnecessary files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Ignore build artifacts
+wazuh-misp-processor
+wazuh-misp-processor-config
+target/
+*.tar.gz
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore test files
+test.sh
+*.test
+
+# Ignore documentation
+README*.md
+FINAL*.md
+QUICK*.md
+*.md

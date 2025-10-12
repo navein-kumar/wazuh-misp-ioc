@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # Redis for IoC caching
+  redis:
+    image: redis:7-alpine
+    container_name: wazuh-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - wazuh-network
+
+  # Direct MISP Processor (Python)
+  wazuh-misp-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile-python
+    container_name: wazuh-misp-processor
+    restart: always
+    depends_on:
+      - redis
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_RETRY_ATTEMPTS: 999
+      REDIS_RETRY_DELAY: 2.0
+      MISP_URL: https://test.domain.in:65534/attributes/restSearch/
+      MISP_API_KEY: testpassword123456789abcdef
+      MISP_SSL_VERIFY: "false"
+      CACHE_TTL_HOURS: 24
+      RATE_LIMIT_SECONDS: 0.01
+      BURST_LIMIT: 100
+      BURST_WINDOW: 1.0
+      CIRCUIT_BREAKER_THRESHOLD: 5
+      CIRCUIT_BREAKER_TIMEOUT: 60
+      # Single file (backward compatibility)
+      ALERTS_FILE: /var/ossec/logs/alerts/alerts.json
+      # Multiple files (comma-separated) - uncomment to use
+      # ALERTS_FILES: /var/ossec/logs/alerts/alerts.json,/var/ossec/logs/alerts/alerts2.json,/var/ossec/logs/alerts/alerts3.json
+      LOG_FILE_PARSED: /var/log/misp-processor/ioc-parsed.log
+      LOG_FILE_MATCHED: /var/log/misp-processor/ioc-matched.log
+      LOG_ROTATION_SIZE_MB: 1024
+      LOG_ROTATION_BACKUP_COUNT: 1
+      SUPPRESSION_WINDOW_MINUTES: 10
+      ALERT_DEDUP_TTL_MINUTES: 30
+    volumes:
+      # Single alerts file (current setup)
+      - /var/ossec/logs/alerts/alerts.json:/var/ossec/logs/alerts/alerts.json:ro
+      
+      # Multiple alerts files - uncomment and add as needed:
+      # - /var/ossec/logs/alerts/alerts2.json:/var/ossec/logs/alerts/alerts2.json:ro
+      # - /var/ossec/logs/alerts/alerts3.json:/var/ossec/logs/alerts/alerts3.json:ro
+      # - /var/ossec/logs/alerts/alerts4.json:/var/ossec/logs/alerts/alerts4.json:ro
+      
+      # Log directory
+      - /var/log/misp-processor:/var/log/misp-processor
+    networks:
+      - wazuh-network
+    user: "0:0"
+    command: ["python", "efficient-processor.py"]
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  wazuh-network:
+    driver: bridge

@@ -1,0 +1,33 @@
+# Sensitive files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Logs
+*.log
+logs/
+/var/log/
+
+# Environment files with secrets
+.env
+.env.local
+.env.production
+
+# Docker volumes
+redis_data/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp

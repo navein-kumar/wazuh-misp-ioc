@@ -1,0 +1,13 @@
+# High-performance IoC extraction and MISP processing
+requests>=2.31.0
+redis>=4.5.0
+kafka-python>=2.0.2
+aiohttp>=3.8.0
+asyncio>=3.4.3
+python-dateutil>=2.8.2
+urllib3>=1.26.0
+certifi>=2023.7.22
+charset-normalizer>=3.2.0
+idna>=3.4
+typing-extensions>=4.7.0
+watchdog>=3.0.0
