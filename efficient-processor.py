@@ -29,25 +29,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class CircuitBreaker:
-    """Circuit breaker pattern for MISP API calls"""
+    """Circuit breaker pattern for MISP API calls with adaptive backoff"""
     
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60, backoff_factor: float = 2.0, max_timeout: int = 604800):
         self.failure_threshold = failure_threshold
-        self.timeout = timeout
+        self.base_timeout = timeout
+        self.backoff_factor = backoff_factor
+        self.max_timeout = max_timeout
+        self.current_timeout = timeout
         self.failure_count = 0
         self.last_failure_time = None
         self.state = 'CLOSED'  # CLOSED, OPEN, HALF_OPEN
         self.lock = threading.Lock()
     
+    def _update_open_timeout(self):
+        # Exponential backoff once we passed threshold
+        over_threshold_failures = max(0, self.failure_count - self.failure_threshold + 1)
+        self.current_timeout = min(int(self.base_timeout * (self.backoff_factor ** over_threshold_failures)), self.max_timeout)
+    
     def call(self, func, *args, **kwargs):
         """Execute function with circuit breaker protection"""
         with self.lock:
             if self.state == 'OPEN':
-                if time.time() - self.last_failure_time > self.timeout:
+                elapsed = time.time() - (self.last_failure_time or 0)
+                if elapsed > self.current_timeout:
                     self.state = 'HALF_OPEN'
                     logger.info("🔄 Circuit breaker: HALF_OPEN - testing connection")
                 else:
-                    logger.warning("⚡ Circuit breaker: OPEN - blocking request")
+                    remaining = int(self.current_timeout - elapsed)
+                    logger.warning(f"⚡ Circuit breaker: OPEN - blocking request, retry in ~{max(0, remaining)}s")
                     return None
             
             try:
@@ -55,6 +65,7 @@ class CircuitBreaker:
                 if self.state == 'HALF_OPEN':
                     self.state = 'CLOSED'
                     self.failure_count = 0
+                    self.current_timeout = self.base_timeout
                     logger.info("✅ Circuit breaker: CLOSED - connection restored")
                 return result
             except Exception as e:
@@ -62,8 +73,13 @@ class CircuitBreaker:
                 self.last_failure_time = time.time()
                 
                 if self.failure_count >= self.failure_threshold:
+                    prev_state = self.state
                     self.state = 'OPEN'
-                    logger.error(f"⚡ Circuit breaker: OPEN - {self.failure_count} failures")
+                    self._update_open_timeout()
+                    if prev_state != 'OPEN':
+                        logger.error(f"⚡ Circuit breaker: OPEN - {self.failure_count} failures, backoff {self.current_timeout}s (max {self.max_timeout}s)")
+                    else:
+                        logger.error(f"⚡ Circuit breaker: still OPEN - backoff {self.current_timeout}s (max {self.max_timeout}s)")
                 
                 raise e
 
@@ -96,7 +112,9 @@ class EfficientProcessor:
         # Circuit breaker for MISP calls
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=int(os.getenv('CIRCUIT_BREAKER_THRESHOLD', '5')),
-            timeout=int(os.getenv('CIRCUIT_BREAKER_TIMEOUT', '60'))
+            timeout=int(os.getenv('CIRCUIT_BREAKER_TIMEOUT', '60')),
+            backoff_factor=float(os.getenv('CIRCUIT_BREAKER_BACKOFF_FACTOR', '2.0')),
+            max_timeout=int(os.getenv('CIRCUIT_BREAKER_MAX_TIMEOUT', '604800'))  # default 1 week
         )
         
         # MISP settings
@@ -124,6 +142,11 @@ class EfficientProcessor:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         })
+        
+        # Outage handling
+        self.pause_on_misp_outage = os.getenv('PAUSE_ON_MISP_OUTAGE', 'true').lower() == 'true'
+        self.misp_probe_interval = int(os.getenv('MISP_PROBE_INTERVAL_SECONDS', '60'))
+        self._start_probe_thread_if_needed()
         
         # Cache TTL
         self.cache_ttl = int(os.getenv('CACHE_TTL_HOURS', '24')) * 3600
@@ -433,6 +456,31 @@ class EfficientProcessor:
             return len(response_data) > 0
         
         return False
+
+    def _probe_misp(self):
+        """Lightweight probe to test MISP availability for auto-resume."""
+        try:
+            def _probe():
+                # Minimal request to check connectivity; small timeout
+                resp = self.session.get(self.misp_url, params={'limit': 1}, verify=self.ssl_verify, timeout=5)
+                if resp.status_code != 200:
+                    raise Exception(f"Probe status {resp.status_code}")
+                return True
+            self.circuit_breaker.call(_probe)
+        except Exception:
+            # Swallow exceptions; circuit breaker handles state
+            pass
+
+    def _probe_loop(self):
+        while not self.shutdown_requested:
+            if self.circuit_breaker.state == 'OPEN':
+                self._probe_misp()
+            time.sleep(self.misp_probe_interval)
+
+    def _start_probe_thread_if_needed(self):
+        if self.pause_on_misp_outage:
+            t = threading.Thread(target=self._probe_loop, daemon=True)
+            t.start()
     
     def rate_limit_check(self):
         """Apply smart rate limiting - only for burst protection"""
@@ -732,6 +780,11 @@ class EfficientProcessor:
         
         while not self.shutdown_requested:
             try:
+                # If configured, pause processing during MISP outage to avoid losing alerts
+                if self.pause_on_misp_outage and self.circuit_breaker.state == 'OPEN':
+                    logger.warning("⏸️  Paused due to MISP outage (circuit OPEN). Will auto-resume when healthy.")
+                    time.sleep(5)
+                    continue
                 files_processed = 0
                 
                 # Process each alerts file

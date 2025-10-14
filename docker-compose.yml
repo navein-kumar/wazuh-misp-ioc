@@ -38,6 +38,10 @@ services:
       BURST_WINDOW: 1.0
       CIRCUIT_BREAKER_THRESHOLD: 5
       CIRCUIT_BREAKER_TIMEOUT: 60
+      CIRCUIT_BREAKER_BACKOFF_FACTOR: 2.0
+      CIRCUIT_BREAKER_MAX_TIMEOUT: 604800
+      PAUSE_ON_MISP_OUTAGE: "true"
+      MISP_PROBE_INTERVAL_SECONDS: 60
       # Single file (backward compatibility)
       ALERTS_FILE: /var/ossec/logs/alerts/alerts.json
       # Multiple files (comma-separated) - uncomment to use

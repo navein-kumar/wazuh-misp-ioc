@@ -76,8 +76,12 @@ ossec-misp/
 | `SUPPRESSION_WINDOW_MINUTES` | IoC duplicate suppression window | `10` | `10` (Prevents same IoC from being processed again within 10min) |
 | `ALERT_DEDUP_TTL_MINUTES` | Alert deduplication TTL | `30` | `30` (Prevents same alert from being processed again within 30min) |
 | **Resilience & Reliability** |
-| `CIRCUIT_BREAKER_THRESHOLD` | Circuit breaker failure threshold | `5` | `5` |
-| `CIRCUIT_BREAKER_TIMEOUT` | Circuit breaker timeout (seconds) | `60` | `60` |
+| `CIRCUIT_BREAKER_THRESHOLD` | Failures before opening circuit | `5` | `5` |
+| `CIRCUIT_BREAKER_TIMEOUT` | Initial open-state timeout (seconds) | `60` | `60` |
+| `CIRCUIT_BREAKER_BACKOFF_FACTOR` | Multiplier for backoff per failure over threshold | `2.0` | `2.0` |
+| `CIRCUIT_BREAKER_MAX_TIMEOUT` | Max open timeout (seconds) | `604800` | `604800` (1 week) |
+| `PAUSE_ON_MISP_OUTAGE` | Pause processing while MISP unavailable | `true` | `true` |
+| `MISP_PROBE_INTERVAL_SECONDS` | Probe interval to auto-resume | `60` | `60` |
 | `REDIS_RETRY_ATTEMPTS` | Redis connection retry attempts | `999` | `999` (Never give up) |
 | `REDIS_RETRY_DELAY` | Redis retry delay (seconds) | `2.0` | `2.0` |
 | **Logging** |
@@ -115,7 +119,7 @@ volumes:
   - /var/ossec/logs/alerts/alerts3.json:/var/ossec/logs/alerts/alerts3.json:ro
 ```
 
-See `MULTIPLE_FILES_EXAMPLE.md` for detailed examples.
+Note: Multiple-files guide previously separate is now covered here for simplicity.
 
 ### Production-Ready Configuration
 
@@ -190,6 +194,7 @@ The processor logs performance statistics every 5 minutes:
 4. **MISP API errors:**
    - Check circuit breaker status in logs
    - Verify MISP API key and URL
+   - If MISP is down for long: circuit breaker uses adaptive backoff up to 1 week and the processor auto-resumes. To disable pausing and continue parsing (risk of cache misses), set `PAUSE_ON_MISP_OUTAGE=false`.
 
 ### Log Analysis
 ```bash
