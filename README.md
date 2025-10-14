@@ -121,6 +121,13 @@ volumes:
 
 Note: Multiple-files guide previously separate is now covered here for simplicity.
 
+### 🛡️ MISP Outage Handling (Auto-Resume)
+
+- When `PAUSE_ON_MISP_OUTAGE=true` (default), processing pauses while MISP is unavailable and a lightweight probe runs every `MISP_PROBE_INTERVAL_SECONDS` (default 60s). On a successful probe, processing auto-resumes.
+- The circuit breaker uses adaptive backoff: starts at `CIRCUIT_BREAKER_TIMEOUT` and grows by `CIRCUIT_BREAKER_BACKOFF_FACTOR` up to `CIRCUIT_BREAKER_MAX_TIMEOUT` (default 1 week), ensuring the service never spins or crashes during long outages.
+- Log rotation safety on resume: if a monitored `alerts.json` rotates while paused, the reader detects it (file size smaller than last position or recreated tiny file) and resets to the new file cleanly.
+- Zero-loss note: if paused and a rotation occurs, bytes written after the last read offset but before rotation are kept in the rotated file (not tailed). To avoid missing any alerts during outages, set `PAUSE_ON_MISP_OUTAGE=false` so parsing continues; MISP queries will be blocked by the circuit breaker until recovery.
+
 ### Production-Ready Configuration
 
 The system is configured for maximum reliability and performance:
