@@ -18,9 +18,18 @@ import sys
 import threading
 from typing import Optional, Dict, Any
 
-# Configure logging
+# Configure logging with environment-based level
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+LOG_LEVEL_MAP = {
+    'DEBUG': logging.DEBUG,
+    'INFO': logging.INFO,
+    'WARNING': logging.WARNING,
+    'ERROR': logging.ERROR,
+    'CRITICAL': logging.CRITICAL,
+}
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL_MAP.get(LOG_LEVEL, logging.INFO),
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler()

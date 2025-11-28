@@ -29,10 +29,13 @@ services:
       REDIS_DB: 0
       REDIS_RETRY_ATTEMPTS: 999
       REDIS_RETRY_DELAY: 2.0
-      MISP_URL: https://test.domain.in:65534/attributes/restSearch/
-      MISP_API_KEY: testpassword123456789abcdef
+      # Replace with your real MISP URL and API key in prod
+      MISP_URL: https://misp.example.com/attributes/restSearch/
+      MISP_API_KEY: CHANGE_ME_MISP_API_KEY
       MISP_SSL_VERIFY: "false"
       CACHE_TTL_HOURS: 24
+      # Python logger level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      LOG_LEVEL: INFO
       RATE_LIMIT_SECONDS: 0.01
       BURST_LIMIT: 100
       BURST_WINDOW: 1.0
@@ -63,6 +66,11 @@ services:
       
       # Log directory
       - /var/log/misp-processor:/var/log/misp-processor
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
     networks:
       - wazuh-network
     user: "0:0"
